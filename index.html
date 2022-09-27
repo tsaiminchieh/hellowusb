@@ -18,20 +18,41 @@
 <p><a href="#" id="click">Click me to get USB device info</a></p>
 
 <script>
+
+  function buf2hex(buffer) { // buffer is an ArrayBuffer
+  return [...new Uint8Array(buffer)]
+      .map(x => x.toString(16).padStart(2, '0'))
+      .join('');
+  }
+
   const filters = [
         {vendorId: 0x0711, productId: 0x5600}
       ];
-  
-  click.onclick = function() {
+  let device;
+  click.onclick = async () => {
 //    var vendorId = '0x' + document.getElementById('vendor').value
 
-    navigator.usb.requestDevice({ filters: filters})
+  
+    device = await navigator.usb.requestDevice({ filters: filters})
     .then(device => {
       console.log(device)
       console.log("Product ID: " + device.productId.toString(16))
       console.log("Vendor ID: " + device.vendorId.toString(16))
     })
     .catch(error => { console.log(error) })
+	
+	await device.open();
+	await device.selectConfiguration(1);
+	await device.claimInterface(0);
+	const result = await device.controlTransferIn({
+    requestType: 'vendor',
+    recipient: 'device',
+    request: 0x80,
+    value: 0x00,
+    index: 0x00},128); // Ready to receive data
+	if(result.status == 'ok'){
+		console.log(buf2hex(result.data.buffer));
+	}
   }
 </script>
 <script src="js/main.js"></script>
