@@ -462,15 +462,7 @@ const filters = [{vendorId: 0x0711, productId: 0x5600} ];
   canvas.height = screen.height;
   const context = canvas.getContext("2d"); 
   const video = document.createElement("video");
-  const updateCanvas = async (now, metadata) => {
-        context.drawImage(video, 0, 0, screen.width, screen.height);
-        const frame = canvas.toDataURL("image/jpeg",0.9);
-        var jpgimg = dataURItoUint8Array(frame);
-        await t6_FilpJpegFrame(device, 1920, 1080, jpgimg, jpgimg.length, 50*1024*1024, 0, 0);
-        console.log('The requestVideoFrameCallback updated.');
-        //video.requestVideoFrameCallback(updateCanvas);
-        updateCanvas(null,null);
-    };
+  
 
   
   click.onclick = async () => {
@@ -512,9 +504,24 @@ const filters = [{vendorId: 0x0711, productId: 0x5600} ];
         const captureStream = await navigator.mediaDevices.getDisplayMedia(({
 			video: true,
 		}));
+		var stream_width = captureStream.getVideoTracks()[0].getSettings().width;
+	    var stream_height = captureStream.getVideoTracks()[0].getSettings().height;
+	    
+	    const updateCanvas = async (now, metadata) => {
+	      
+            context.drawImage(video, 0, 0, stream_width, stream_height);
+            const frame = canvas.toDataURL("image/jpeg",0.9);
+            var jpgimg = dataURItoUint8Array(frame);
+            await t6_FilpJpegFrame(device, 1920, 1080, jpgimg, jpgimg.length, 50*1024*1024, 0, 0);
+            console.log('The requestVideoFrameCallback updated.'+stream_width+" "+stream_height);
+            //video.requestVideoFrameCallback(updateCanvas);
+            updateCanvas(null,null);
+        };
+	    
         video.srcObject = captureStream;
 	    video.play();
 	    video.requestVideoFrameCallback(updateCanvas);
+	    
 	    /*
 	    video.ontimeupdate = async (event) => {
 	        context.drawImage(video, 0, 0, screen.width, screen.height);
