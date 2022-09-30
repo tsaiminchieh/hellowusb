@@ -1,7 +1,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Hello World</title>
+  <title>Hello World 1 </title>
   <link rel="manifest" href="/manifest.json">
   <link rel="stylesheet" href="css/style.css">
   <link rel="icon" href="favicon.ico" type="image/x-icon" />
@@ -18,26 +18,471 @@
 <p><a href="#" id="click">Click me to get USB device info</a></p>
 
 <script>
+const VENDOR_REQ_SET_MONITOR_CTRL                = 0x03;
+const VENDOR_REQ_SET_RESOLUTION_DETAIL_TIMING    = 0x12;
+const VENDOR_REQ_SET_SOFTWARE_READY              = 0x31;
+const VENDOR_REQ_GET_RESOLUTION_TABLE_NUM        = 0x84; 
+const VENDOR_REQ_QUERY_MONITOR_CONNECTION_STATUS = 0x87;
+const VENDOR_REQ_QUERY_VIDEO_RAM_SIZE            = 0x88;
+const VENDOR_REQ_GET_RESOLUTION_TIMING_TABLE     = 0x89;
+const VENDOR_REQ_GET_VERSION                     = 0xB0;
 
-  function buf2hex(buffer) { // buffer is an ArrayBuffer
+
+const VIDEO_CMD_NO_OP           = 0;
+const VIDEO_CMD_CLIP_PRIMARY    = 1;
+const VIDEO_CMD_CLIP_SECONDARY  = 2;
+const VIDEO_CMD_FLIP_PRIMARY    = 3;
+const VIDEO_CMD_FLIP_SECONDARY  = 4;
+const VIDEO_CMD_BLT_SOURCETOMEM = 5;
+const VIDEO_CMD_BLT_MEMTOMEM    = 6;
+const VIDEO_CMD_FB_DIRECT       = 7;
+const VIDEO_CMD_PREVIEW         = 8;
+const VIDEO_CMD_ACTIVE          = 9;
+
+const VIDEO_COLOR_YUYV   = 0;
+const VIDEO_COLOR_YV12   = 4;
+const VIDEO_COLOR_NV12   = 6;
+const VIDEO_COLOR_RGB32  = 8;
+const VIDEO_COLOR_RGB24  = 9;
+const VIDEO_COLOR_YUV24  = 10;
+const VIDEO_COLOR_YUV444 = 11;
+const VIDEO_COLOR_JPEG	 = 13;
+
+
+
+async function t6_get_ram_size(usb_handle)
+{
+    const result = await usb_handle.controlTransferIn({
+    requestType: 'vendor',
+    recipient: 'device',
+    request: VENDOR_REQ_QUERY_VIDEO_RAM_SIZE,
+    value: 0x00,
+    index: 0x00},1); // Ready to receive data
+	if(result.status == 'ok'){
+	    const pbuf = new Uint8Array(result.data.buffer);
+		console.log("ram size is:" + pbuf[0]);
+	}
+    
+    
+}
+
+async function t6_get_get_version(usb_handle)
+{
+    const result = await usb_handle.controlTransferIn({
+    requestType: 'vendor',
+    recipient: 'device',
+    request: VENDOR_REQ_GET_VERSION,
+    value: 0x00,
+    index: 0x00},4); // Ready to receive data
+	if(result.status == 'ok'){
+	    const pbuf = new Uint32Array(result.data.buffer);
+		console.log("T6 version is:" + pbuf[0]);
+		return pbuf[0];
+	}else
+	    return -1;
+    
+    
+}
+
+
+async function t6_get_monitor_status(usb_handle)
+{
+    const result = await usb_handle.controlTransferIn({
+    requestType: 'vendor',
+    recipient: 'device',
+    request: VENDOR_REQ_QUERY_MONITOR_CONNECTION_STATUS,
+    value: 0x00,
+    index: 0x00},1); // Ready to receive data
+	if(result.status == 'ok'){
+	    const pbuf = new Uint8Array(result.data.buffer);
+		console.log("monitor is:" + pbuf[0]);
+	}
+}
+
+async function t6_get_resolution_num(usb_handle)
+{
+    const result = await usb_handle.controlTransferIn({
+    requestType: 'vendor',
+    recipient: 'device',
+    request: VENDOR_REQ_GET_RESOLUTION_TABLE_NUM,
+    value: 0x00,
+    index: 0x00},4); // Ready to receive data
+	if(result.status == 'ok'){
+	    const pbuf = new Uint32Array(result.data.buffer);
+		console.log("resolution no = " + pbuf[0]);
+		return pbuf[0];
+	}else
+	    return -1;
+}
+
+async function t6_set_sw_ready(usb_handle){
+    const result = await usb_handle.controlTransferOut({
+    requestType: 'vendor',
+    recipient: 'device',
+    request: VENDOR_REQ_SET_SOFTWARE_READY,
+    value: 0x00,
+    index: 0x00});
+    if(result.status == 'ok')
+        return 0;
+    else
+        return -1;
+}
+
+async function t6_set_monitor_power(usb_handle, on){
+    const result = await usb_handle.controlTransferOut({
+    requestType: 'vendor',
+    recipient: 'device',
+    request: VENDOR_REQ_SET_MONITOR_CTRL,
+    value: 0x00,
+    index: on});
+    if(result.status == 'ok') {
+        console.log("monitor is power: "+ on +" ok");
+        return 0;
+    }
+    else
+        return -1;
+}
+
+async function t6_fill_fullscreen_rgb(usb_handle, color, fbaddr)
+{
+   var bch = new DataView(new ArrayBuffer(32));
+   var data_size = 1920*1080*3;
+   var videodatasize = 48 + data_size; //video_flip_header+datasize
+   
+   bch.setUint32(0, 0, true); //Signature
+   bch.setUint32(4, videodatasize, true); //PayloadLength
+   bch.setUint32(8, fbaddr, true); //PayloadAddress
+   bch.setUint32(12, videodatasize , true); //PacketLength
+   
+   console.log(buf2hex(bch.buffer));
+   const result = await usb_handle.transferOut(2, bch.buffer);
+   console.log("fill_color stage 1: "+result.status )
+   
+   var cmd_buf = new ArrayBuffer(videodatasize);
+   var vfh     = new DataView(cmd_buf, 0, 48);
+   var video_buf =  new DataView(cmd_buf, 48, videodatasize -48);
+   
+   vfh.setUint32(0, VIDEO_CMD_FLIP_PRIMARY, true);  //Command
+   vfh.setUint32(4, data_size, true);               //PayloadSize
+   vfh.setUint32(8, 0, true);                       //FenceID
+   vfh.setUint32(12, VIDEO_COLOR_RGB24, true)       //TargetFormat
+   vfh.setUint16(16, 1080*3, true);                 //Y_RGB_Pitch
+   vfh.setUint16(18, 0, true);                      //UV_Pitch
+   vfh.setUint32(20, fbaddr+48, true);              //Y_RGB_Data_FB_Offset
+   vfh.setUint32(24, 0, true);                      //U_UV_Data_Offset
+   vfh.setUint32(28, 0, true);                      //V_Data_Offset
+   vfh.setUint32(32, VIDEO_COLOR_RGB24, true);      //SourceFormat
+   vfh.setUint8(47, 0);                             //Flag
+   for(i=0;i<data_size;i++)
+       video_buf.setUint8(i, color);
+   
+   const result2 = await usb_handle.transferOut(2, cmd_buf);
+   console.log("fill_color stage 2: "+result2.status )
+}
+
+function downloadImage(data, filename = 'untitled.jpeg') {
+    var a = document.createElement('a');
+    a.href = data;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+}
+
+function concatArrayBuffers (bufs) {
+                        var offset = 0;
+                        var bytes = 0;
+                        var bufs2=bufs.map(function(buf,total){
+                            bytes += buf.byteLength;
+                            return buf;
+                        });
+                        var buffer = new ArrayBuffer(bytes);
+                        var store = new Uint8Array(buffer);
+                        bufs2.forEach(function(buf){
+                            store.set(new Uint8Array(buf.buffer||buf,buf.byteOffset),offset);
+                            offset += buf.byteLength;
+                        });
+                        return buffer
+                         
+                    }
+
+async function t6_FilpJpegFrame(usb_handle, jwidth,jheight,jpgimg, jpgsize, fbaddr, flag, fenceid)
+{
+  
+   var bch = new DataView(new ArrayBuffer(32));
+   var len = jpgsize + 48 + 1024;
+   var VideoDataSize = len -48 ;
+   var cmdAddrr = 0;
+   
+   
+   console.log(jwidth+" "+jheight);
+   const Y_BlockSize = (Math.floor((jwidth+31)/32)*32) * (Math.floor((jheight+31)/32)*32)  +1024 ; 
+   var Width = Math.floor((jwidth+31)/32)*32;
+    
+   
+   bch.setUint32(0, 0, true); //Signature
+   bch.setUint32(4, len, true); //PayloadLength
+   bch.setUint32(8, cmdAddrr, true); //PayloadAddress
+   bch.setUint32(12, len , true); //PacketLength
+   
+   //console.log(buf2hex(bch.buffer));
+   const result = await usb_handle.transferOut(2, bch.buffer);
+   console.log("t6_FilpJpegFrame stage 1: "+result.status+" "+Width+" "+Y_BlockSize)
+   
+   var vfh_buf = new ArrayBuffer(48);
+   var vfh     = new DataView(vfh_buf);
+   
+   
+   vfh.setUint32(0, VIDEO_CMD_FLIP_PRIMARY, true);  //Command
+   vfh.setUint32(4, VideoDataSize, true);           //PayloadSize
+   vfh.setUint32(8, fenceid, true);                 //FenceID
+   vfh.setUint32(12, VIDEO_COLOR_NV12, true)        //TargetFormat
+   vfh.setUint16(16, Width, true);  //Y_RGB_Pitch
+   vfh.setUint16(18, Width, true);  //UV_Pitch
+   vfh.setUint32(20, fbaddr, true);                 //Y_RGB_Data_FB_Offset
+   vfh.setUint32(24, fbaddr+Y_BlockSize, true);     //U_UV_Data_Offset
+   vfh.setUint32(28, 0, true);                      //V_Data_Offset
+   vfh.setUint32(32, VIDEO_COLOR_JPEG, true);       //SourceFormat
+   vfh.setUint8(47, 0);                             //Flag
+   
+   var dummy_buf = new ArrayBuffer(1024);
+   var cmd_buf =  concatArrayBuffers([vfh_buf, jpgimg, dummy_buf])
+   //console.log(buf2hex(cmd_buf));
+   const result2 = await usb_handle.transferOut(2, cmd_buf);
+   console.log("t6_FilpJpegFrame stage 2: "+result2.status )
+}
+
+
+function RESOLUTIONTIMING(m_dataview)
+{
+    this.PixelClock       = m_dataview.getUint32(0, true);  // 0000h Pixel clock, in KHz.
+    this.Frequency        = m_dataview.getUint8 (4);        // 0004h Refresh rate, in Hz.
+    this.Reserved         = m_dataview.getUint8 (5);        // 0005h Reserved.
+    this.HorTotalTime     = m_dataview.getUint16(6, true);  // 0006h Horizontal Total
+    this.HorAddrTime      = m_dataview.getUint16(8, true);  // 0008h Horizontal Active
+    this.HorSyncStart     = m_dataview.getUint16(10, true); // 000Ah Sync Start = active + front porch
+    this.HorSyncTime      = m_dataview.getUint16(12, true); // 000Ch Sync
+    this.VerTotalTime     = m_dataview.getUint16(14, true); // 000Eh Vertical Total
+    this.VerAddrTime      = m_dataview.getUint16(16, true); // 0010h Vertical Active
+    this.VerSyncStart     = m_dataview.getUint16(18, true); // 0012h Sync Start = active + front porch
+    this.VerSyncTime      = m_dataview.getUint16(20, true); // 0014h Sync
+    this.FNUM             = m_dataview.getUint16(22, true); // 0016h PLL P
+    this.FDEN             = m_dataview.getUint16(24, true); // 0018h PLL Q
+    this.IDIV             = m_dataview.getUint8 (26);       // 001Ah PLL N
+    this.OutputSelect     = m_dataview.getUint8 (27);       // 001Bh Output Select
+    this.HorSyncPolarity  = m_dataview.getUint8 (28);        // 001Ch 0:Active Low; 1:Active High.
+    this.VerSyncPolarity  = m_dataview.getUint8 (29);        // 001Dh 0:Active Low; 1:Active High.
+    this.Reduced          = m_dataview.getUint8 (30);        // 001Eh 
+    this.Flag             = m_dataview.getUint8 (31);        // 001Fh D0: 0:standard timing; 1:customer timing;
+                                                             //       D1-D7: reserved
+}
+function T6CalculatePixelClock(ulPixelClock, ulBaseFreq)
+{
+    var fMhz = 0.0;
+    var VideoSelectOutput = [3, 1, 2, 0];
+    var x = 4;
+    
+    if ((ulPixelClock < 25000) || (ulPixelClock > 400000)){
+        this.result = -1;
+        return;
+    }
+    fMhz = ulPixelClock/1000;
+    for (i = 0; i < 4; i++) {
+        if ((fMhz * x) >= 800.0) {
+            this.pN = (fMhz * x) / ulBaseFreq;
+            this.pP =(((fMhz * x) / ulBaseFreq) - this.pN) * 1000;
+            this.pQ = 1000;
+            this.pVideoSelect = VideoSelectOutput[i];
+            this.result = 0;
+            return;
+        } else if ((fMhz * x) > 1600.0) {
+            this.pN = 0;
+            this.pP = 0;
+            this.pQ = 0;
+            this.pVideoSelect = 0;
+            this.result = -1;
+            return;
+        } else {
+            x = x * 2;
+        }
+    }
+    this.pN = 0;
+    this.pP = 0;
+    this.pQ = 0;
+    this.pVideoSelect = 0;
+    this.result = -1;
+    this.result = -1;
+}
+async function t6_get_resolution_timing(usb_handle, disp_w, disp_h)
+{
+    var r_number = await t6_get_resolution_num(usb_handle);
+    var u_size   = r_number * 32; //32 is sizeof RESOLUTIONTIMING
+    var t6_ver   = await t6_get_get_version(usb_handle);
+    var cmd = 40;
+    var r_timing;
+    var i = 0;
+    
+    console.log("r_number ="+ r_number);
+    console.log("u_size ="+ u_size);
+    const result = await usb_handle.controlTransferIn({
+    requestType: 'vendor',
+    recipient: 'device',
+    request: VENDOR_REQ_GET_RESOLUTION_TIMING_TABLE,
+    value: 0x00,
+    index: 0x00},u_size); // Ready to receive data
+	if(result.status == 'ok'){
+	    for(i=0;i< r_number;i++){
+	        var r_table = new RESOLUTIONTIMING(new DataView(result.data.buffer, i*32, 32));
+	        console.log(i+": "+r_table.PixelClock+" "+r_table.HorAddrTime+" "+r_table.VerAddrTime);
+	        if(disp_w == r_table.HorAddrTime && disp_h== r_table.VerAddrTime){
+	            if(t6_ver == 0) 
+	                cmd = 48; //lite
+	            else    
+	                cmd = 40; //super lite
+	                
+	           var t6clock = new T6CalculatePixelClock(r_table.PixelClock, cmd);
+	           if(t6clock.result == 0){
+	               r_timing = new DataView(result.data.buffer, i*32, 32);
+	               r_timing.setUint16(22, t6clock.pP, true);
+	               r_timing.setUint16(24, t6clock.pQ, true);
+	               r_timing.setUint8 (26, t6clock.pN);
+	               r_timing.setUint8 (27, t6clock.pVideoSelect);
+	               const bingo = new Uint8Array(result.data.buffer, i*32, 32);
+	                console.log("show bingo "+i);
+                    console.log(buf2hex(bingo));
+	               return bingo;
+	           }
+	        }
+	    }
+	    return null;
+	}else
+	    return null;
+    
+}
+
+async function t6_set_resolution(usb_handle, w, h)
+{
+    var myres = await t6_get_resolution_timing(usb_handle, w, h);
+    console.log("show myres");
+    console.log(buf2hex(myres));
+    if(myres != null){
+        const result = await usb_handle.controlTransferOut({
+            requestType: 'vendor',
+            recipient: 'device',
+            request: VENDOR_REQ_SET_RESOLUTION_DETAIL_TIMING,
+            value: 0x00,
+            index: 0x00},myres);
+        if(result.status == 'ok'){
+            console.log("t6_set_resolution ok");   
+            t6_set_sw_ready(usb_handle);
+            return 0;
+        }
+        else {
+            console.log("t6_set_resolution fail");   
+            return -1;
+        }
+        
+    }
+    
+}
+
+
+function EDID_CheckSum(buffer) {
+    var i = 0, CheckSum = 0;
+    const pbuf = new Uint8Array(buffer);
+    for (i = 0; i < 128; i++) {
+        CheckSum += pbuf[i];
+        CheckSum &= 0xFF;
+    }
+    return CheckSum;
+}  
+
+function EDID_Header_Check(buffer){
+    const pbuf = new Uint8Array(buffer);
+    if (pbuf[0] != 0x00 || pbuf[1] != 0xFF || pbuf[2] != 0xFF ||
+        pbuf[3] != 0xFF || pbuf[4] != 0xFF || pbuf[5] != 0xFF ||
+        pbuf[6] != 0xFF || pbuf[7] != 0x00) {
+        console.log("EDID block0 header error\n");
+        return -1;
+    }
+    else
+        return 0;
+}
+
+function EDID_Version_Check(buffer)
+{
+    const pbuf = new Uint8Array(buffer);
+    console.log("EDID version: "+ pbuf[0x12]+" "+pbuf[0x13]);
+    if (pbuf[0x12] != 0x01) {
+        console.log("Unsupport EDID format,EDID parsing exit\n");
+        return -1;
+    }
+    if (pbuf[0x13] < 3 && !(pbuf[0x18] & 0x02)) {
+        console.log("EDID revision < 3 and preferred timing feature bit"+
+                    "not set, ignoring EDID info\n");
+        return -1;
+    }
+    
+    return 0;
+}
+    
+function dataURItoUint8Array(dataURI) {
+    // convert base64/URLEncoded data component to raw binary data held in a string
+    var byteString;
+    if (dataURI.split(',')[0].indexOf('base64') >= 0)
+        byteString = atob(dataURI.split(',')[1]);
+    else
+        byteString = unescape(dataURI.split(',')[1]);
+
+    // separate out the mime component
+    var mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0];
+
+    // write the bytes of the string to a typed array
+    var ia = new Uint8Array(byteString.length);
+    for (var i = 0; i < byteString.length; i++) {
+        ia[i] = byteString.charCodeAt(i);
+    }
+
+    return ia;
+}
+
+function buf2hex(buffer) { // buffer is an ArrayBuffer
   return [...new Uint8Array(buffer)]
       .map(x => x.toString(16).padStart(2, '0'))
-      .join('');
+      .join(' ');
   }
 
-  const filters = [
-        {vendorId: 0x0711, productId: 0x5600}
-      ];
+
+var m_stop_capture = 0;
+
+const filters = [{vendorId: 0x0711, productId: 0x5600} ];
+  
   let device;
+  const canvas = document.createElement("canvas");
+  canvas.width = screen.width; 
+  canvas.height = screen.height;
+  const context = canvas.getContext("2d"); 
+  const video = document.createElement("video");
+  const updateCanvas = async (now, metadata) => {
+        context.drawImage(video, 0, 0, screen.width, screen.height);
+        const frame = canvas.toDataURL("image/jpeg",0.9);
+        var jpgimg = dataURItoUint8Array(frame);
+        await t6_FilpJpegFrame(device, 1920, 1080, jpgimg, jpgimg.length, 50*1024*1024, 0, 0);
+        console.log('The requestVideoFrameCallback updated.');
+        //video.requestVideoFrameCallback(updateCanvas);
+        updateCanvas(null,null);
+    };
+
+  
   click.onclick = async () => {
 //    var vendorId = '0x' + document.getElementById('vendor').value
 
   
-    device = await navigator.usb.requestDevice({ filters: filters})
-    .then(device => {
-      console.log(device)
-      console.log("Product ID: " + device.productId.toString(16))
-      console.log("Vendor ID: " + device.vendorId.toString(16))
+    await navigator.usb.requestDevice({ filters: filters})
+    .then(sel_device => {
+      console.log(sel_device)
+      console.log("Product ID: " + sel_device.productId.toString(16))
+      console.log("Vendor ID: " + sel_device.vendorId.toString(16))
+      device = sel_device;
     })
     .catch(error => { console.log(error) })
 	
@@ -52,7 +497,39 @@
     index: 0x00},128); // Ready to receive data
 	if(result.status == 'ok'){
 		console.log(buf2hex(result.data.buffer));
+        EDID_Version_Check(result.data.buffer);
 	}
+	await t6_get_ram_size(device);
+	await t6_get_monitor_status(device);
+	await t6_set_monitor_power(device, 1);
+	await t6_set_resolution(device, 1920, 1080);
+	//await t6_fill_fullscreen_rgb(device, 0xFF, 36*1024*1024);
+
+    
+   
+    
+    try {
+        const captureStream = await navigator.mediaDevices.getDisplayMedia(({
+			video: true,
+		}));
+        video.srcObject = captureStream;
+	    video.play();
+	    video.requestVideoFrameCallback(updateCanvas);
+	    /*
+	    video.ontimeupdate = async (event) => {
+	        context.drawImage(video, 0, 0, screen.width, screen.height);
+            const frame = canvas.toDataURL("image/jpeg",0.9);
+            var jpgimg = dataURItoUint8Array(frame);
+            await t6_FilpJpegFrame(device, 1920, 1080, jpgimg, jpgimg.length, 50*1024*1024, 0, 0);
+            console.log('The currentTime attribute has been updated. Again.');
+	    }
+        */
+       
+       // captureStream.getTracks().forEach(track => track.stop());
+    
+    } catch (err) {
+        console.error("Error: " + err);
+    }
   }
 </script>
 <script src="js/main.js"></script>
