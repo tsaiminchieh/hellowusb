@@ -503,8 +503,8 @@ const filters = [{vendorId: 0x0711, productId: 0x5600} ];
     try {
         const captureStream = await navigator.mediaDevices.getDisplayMedia(({
 			video: true,
-			width: { ideal: 1920, max: 1920 },
-		       height: { ideal: 1080, max: 1080 }
+			width: { min: 1920, ideal: 1920, max: 1920 },
+		       height: { min: 1080, ideal: 1080, max: 1080 }
 		}));
 		var stream_width = captureStream.getVideoTracks()[0].getSettings().width;
 	    var stream_height = captureStream.getVideoTracks()[0].getSettings().height;
