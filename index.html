@@ -494,7 +494,7 @@ const filters = [{vendorId: 0x0711, productId: 0x5600} ];
 	await t6_get_ram_size(device);
 	await t6_get_monitor_status(device);
 	await t6_set_monitor_power(device, 1);
-	await t6_set_resolution(device, screen.width, screen.width);
+	await t6_set_resolution(device, screen.width, screen.height);
 	//await t6_fill_fullscreen_rgb(device, 0xFF, 36*1024*1024);
 
     
@@ -512,7 +512,7 @@ const filters = [{vendorId: 0x0711, productId: 0x5600} ];
             context.drawImage(video, 0, 0, stream_width, stream_height);
             const frame = canvas.toDataURL("image/jpeg",0.9);
             var jpgimg = dataURItoUint8Array(frame);
-            await t6_FilpJpegFrame(device, screen.width, screen.width, jpgimg, jpgimg.length, 50*1024*1024, 0, 0);
+            await t6_FilpJpegFrame(device, screen.width, screen.height, jpgimg, jpgimg.length, 50*1024*1024, 0, 0);
             console.log('The requestVideoFrameCallback updated.'+stream_width+" "+stream_height);
             //video.requestVideoFrameCallback(updateCanvas);
             updateCanvas(null,null);
