@@ -146,7 +146,7 @@ async function t6_set_monitor_power(usb_handle, on){
 async function t6_fill_fullscreen_rgb(usb_handle, color, fbaddr)
 {
    var bch = new DataView(new ArrayBuffer(32));
-   var data_size = 1920*1080*3;
+   var data_size = screen.width*screen.height*3;
    var videodatasize = 48 + data_size; //video_flip_header+datasize
    
    bch.setUint32(0, 0, true); //Signature
@@ -166,7 +166,7 @@ async function t6_fill_fullscreen_rgb(usb_handle, color, fbaddr)
    vfh.setUint32(4, data_size, true);               //PayloadSize
    vfh.setUint32(8, 0, true);                       //FenceID
    vfh.setUint32(12, VIDEO_COLOR_RGB24, true)       //TargetFormat
-   vfh.setUint16(16, 1080*3, true);                 //Y_RGB_Pitch
+   vfh.setUint16(16, screen.height*3, true);                 //Y_RGB_Pitch
    vfh.setUint16(18, 0, true);                      //UV_Pitch
    vfh.setUint32(20, fbaddr+48, true);              //Y_RGB_Data_FB_Offset
    vfh.setUint32(24, 0, true);                      //U_UV_Data_Offset
@@ -494,7 +494,7 @@ const filters = [{vendorId: 0x0711, productId: 0x5600} ];
 	await t6_get_ram_size(device);
 	await t6_get_monitor_status(device);
 	await t6_set_monitor_power(device, 1);
-	await t6_set_resolution(device, 1920, 1080);
+	await t6_set_resolution(device, screen.width, screen.width);
 	//await t6_fill_fullscreen_rgb(device, 0xFF, 36*1024*1024);
 
     
@@ -503,8 +503,6 @@ const filters = [{vendorId: 0x0711, productId: 0x5600} ];
     try {
         const captureStream = await navigator.mediaDevices.getDisplayMedia(({
 			video: true,
-			width: { min: 1920, ideal: 1920, max: 1920 },
-		       height: { min: 1080, ideal: 1080, max: 1080 }
 		}));
 		var stream_width = captureStream.getVideoTracks()[0].getSettings().width;
 	    var stream_height = captureStream.getVideoTracks()[0].getSettings().height;
@@ -514,7 +512,7 @@ const filters = [{vendorId: 0x0711, productId: 0x5600} ];
             context.drawImage(video, 0, 0, stream_width, stream_height);
             const frame = canvas.toDataURL("image/jpeg",0.9);
             var jpgimg = dataURItoUint8Array(frame);
-            await t6_FilpJpegFrame(device, 1920, 1080, jpgimg, jpgimg.length, 50*1024*1024, 0, 0);
+            await t6_FilpJpegFrame(device, screen.width, screen.width, jpgimg, jpgimg.length, 50*1024*1024, 0, 0);
             console.log('The requestVideoFrameCallback updated.'+stream_width+" "+stream_height);
             //video.requestVideoFrameCallback(updateCanvas);
             updateCanvas(null,null);
